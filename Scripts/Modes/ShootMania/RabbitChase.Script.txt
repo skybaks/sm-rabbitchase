@@ -2,16 +2,20 @@
 #Extends "Modes/ShootMania/Base/ModeShootmania.Script.txt"
 
 #Const  CompatibleMapTypes  "MeleeArena"
-#Const  Version             "1.0.0"
+#Const  Version             "1.1.0"
 #Const  ScriptName          "Modes/ShootMania/RabbitChase.Script.txt"
 
 #Const C_HudModulePath "Nadeo/ShootMania/Melee/Hud.Module.Gbx"
 
 #Include "MathLib" as Math
 #Include "TextLib" as TextLib
+#Include "TimeLib" as TimeLib
 #Include "Libs/Nadeo/Interface.Script.txt" as Interface
 
-#Setting S_TimeLimit    600 as _("Time Limit")
+#Setting S_TimeLimit        600     as _("Time Limit")
+#Setting S_RabbitArmor      3       as _("Rabbit Armor Count")
+#Setting S_HunterArmor      1       as _("Hunter Armor Count")
+
 
 ***Match_Settings***
 ***
@@ -22,9 +26,9 @@ MB_Settings_UseDefaultTimer = False;
 ***Match_Rules***
 ***
 ModeInfo::SetName("Rabbit Chase");
-ModeInfo::SetType("All vs One");
-ModeInfo::SetRules("As a hunter, chase and hunt the rabbit to score points. As the rabbit, survive.");
-ModeInfo::SetStatusMessage(_("As a hunter, chase and hunt the rabbit to score points. As the rabbit, survive."));
+ModeInfo::SetType("Hunters vs Rabbit");
+ModeInfo::SetRules("Hunt to become the rabbit, then kill the hunters to survive.\nGain 1 point for landing a hit, lose 1 point for getting hit.");
+ModeInfo::SetStatusMessage(_("Hunt the rabbit."));
 ***
 
 ***Match_LoadHud***
@@ -60,7 +64,7 @@ SpawnsList = Ident[];
 CurrentRabbit = Null;
 
 if (Hud != Null && Hud.ScoresTable != Null) {
-    Hud.ScoresTable.SetFooterText("Player Rank");
+    Hud.ScoresTable.SetFooterText(TextLib::Compose("Time limit - " ^ TextLib::TimeToText(S_TimeLimit * 1000)));
 }
 
 StartTime = Now;
@@ -90,7 +94,6 @@ foreach (Event in PendingEvents) {
     } else if (Event.Type == CSmModeEvent::EType::OnHit) {
         if (Event.Shooter != Event.Victim && (Event.Shooter == CurrentRabbit || Event.Victim == CurrentRabbit)) {
             Scores::AddPlayerRoundPoints(Event.Shooter.Score, 1);
-            Event.Victim.Armor -= Event.Damage;
             if (Event.Victim == CurrentRabbit) {
                 LastHitRabbit = Event.Shooter;
             }
@@ -123,8 +126,8 @@ foreach (Player in Players) {
         } else if (SpawnsList.count > 1) {
             SpawnId = SpawnsList[Math::Rand(0, SpawnsList.count - 1)];
         }
-        SetHunter(Player);
         SM::Spawn(Player, 0, MapLandmarks_PlayerSpawn[SpawnId].PlayerSpawn);
+        SetHunter(Player);
         SpawnsList.remove(SpawnId);
     }
 }
@@ -170,14 +173,14 @@ if (BestPlayerScore != Null) {
 
 Void SetHunter(CSmPlayer _Player) {
     _Player.ForceColor = <0.9,0.33,0.0>;
-    _Player.ArmorMax = 100;
-    _Player.Armor = 100;
+    _Player.ArmorMax = 100 * S_HunterArmor;
+    _Player.Armor = 100 * S_HunterArmor;
 }
 
 Void SetRabbit(CSmPlayer _Player) {
     _Player.ForceColor = <0.01,0.01,0.01>;
-    _Player.ArmorMax = 200;
-    _Player.Armor = 200;
+    _Player.ArmorMax = 100 * S_RabbitArmor;
+    _Player.Armor = 100 * S_RabbitArmor;
 
     declare Text Message = TextLib::Compose(_("$<%1$> is now the Rabbit"), _Player.User.Name);
     Message::SendBigMessage(Message, 3000, 2, CUIConfig::EUISound::Notice, 0);
