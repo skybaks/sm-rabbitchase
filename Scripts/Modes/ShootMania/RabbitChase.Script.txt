@@ -2,7 +2,7 @@
 #Extends "Modes/ShootMania/Base/ModeShootmania.Script.txt"
 
 #Const  CompatibleMapTypes  "MeleeArena"
-#Const  Version             "1.1.0"
+#Const  Version             "2.0.0"
 #Const  ScriptName          "Modes/ShootMania/RabbitChase.Script.txt"
 
 #Const C_HudModulePath "Nadeo/ShootMania/Melee/Hud.Module.Gbx"
@@ -13,9 +13,21 @@
 #Include "TimeLib" as TimeLib
 #Include "Libs/Nadeo/Interface.Script.txt" as Interface
 
-#Setting S_TimeLimit        600     as _("Time Limit")
-#Setting S_RabbitArmor      3       as _("Rabbit Armor Count")
-#Setting S_HunterArmor      1       as _("Hunter Armor Count")
+#Setting S_TimeLimit            600     as _("Time Limit")
+#Setting S_RabbitArmor          3       as _("Rabbit Armor Count")
+#Setting S_HunterArmor          1       as _("Hunter Armor Count")
+#Setting S_DisablePointsLoss    False   as _("Disable Points Loss")
+
+#Struct K_RabbitInfo {
+    Ident RabbitPlayerId;
+    Ident LastHitRabbitPlayerId;
+}
+
+
+***Match_LogVersions***
+***
+Log::RegisterScript(ScriptName, Version);
+***
 
 
 ***Match_Settings***
@@ -24,13 +36,20 @@ MB_Settings_UseDefaultHud = False;
 MB_Settings_UseDefaultTimer = False;
 ***
 
+
 ***Match_Rules***
 ***
 ModeInfo::SetName("Rabbit Chase");
 ModeInfo::SetType("Hunters vs Rabbit");
-ModeInfo::SetRules("Hunt to become the rabbit, then kill the hunters to survive.\nGain 1 point for landing a hit, lose 1 point for getting hit.");
-ModeInfo::SetStatusMessage(_("Hunt the rabbit."));
+ModeInfo::SetRules(
+"""Hunt to become the rabbit, then eliminate the hunters to survive.
+
+Gain 1 point for landing a hit, lose 1 point for getting hit.
+
+The match ends when the time runs out.""");
+ModeInfo::SetStatusMessage(_("Hunt the rabbit"));
 ***
+
 
 ***Match_LoadHud***
 ***
@@ -40,10 +59,12 @@ if (Hud != Null && Hud.ScoresTable != Null) {
 }
 ***
 
+
 ***Match_SpawnScreen***
 ***
 SpawnScreen::CreateScores("Score.RoundPoints");
 ***
+
 
 ***Match_StartServer***
 ***
@@ -53,17 +74,17 @@ Interface::CreateRank();
 Layers::Create(C_RabbitStatusLayerName, RabbitStatusML(Null));
 ***
 
+
 ***Match_InitMap***
 ***
 declare Ident[] SpawnsList;
-declare CSmPlayer CurrentRabbit;
-declare CSmPlayer LastHitRabbit;
+declare K_RabbitInfo RabbitInfo;
 ***
+
 
 ***Match_StartMap***
 ***
 SpawnsList = Ident[];
-CurrentRabbit = Null;
 
 if (Hud != Null && Hud.ScoresTable != Null) {
     Hud.ScoresTable.SetFooterText(TextLib::Compose("Time limit - " ^ TextLib::TimeToText(S_TimeLimit * 1000)));
@@ -76,47 +97,60 @@ if (S_TimeLimit > 0) {
     EndTime = -1;
 }
 
+//Users_CreateFake("fakeplayer_03", 0);
+//Users_CreateFake("fakeplayer_04", 0);
+
 Layers::Attach(C_RabbitStatusLayerName);
 ***
 
-***Match_PlayLoop***
+
+***Match_PlayLoop_HandleEvents***
 ***
 foreach (Event in PendingEvents) {
     if (Event.Type == CSmModeEvent::EType::OnArmorEmpty) {
-        if (Event.Victim != Null) {
-            Scores::RemovePlayerRoundPoints(Event.Victim.Score, 1);
-            if (Event.Victim == CurrentRabbit) {
-                CurrentRabbit = Null;
-                if (LastHitRabbit != Null && LastHitRabbit.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned) {
-                    CurrentRabbit = LastHitRabbit;
-                    SetRabbit(CurrentRabbit);
-                    LastHitRabbit = Null;
-                }
+        if (Event.VictimEntity != Null && (Event.VictimEntity is CSmPlayer)) {
+            declare CSmPlayer VictimPlayer <=> (Event.VictimEntity as CSmPlayer);
+            if (!S_DisablePointsLoss) {
+                Scores::RemovePlayerRoundPoints(VictimPlayer.Score, 1);
+            }
+            if (VictimPlayer.Id == RabbitInfo.RabbitPlayerId) {
+                RabbitInfo.RabbitPlayerId = NullId;
             }
         }
         Events::Valid(Event);
     } else if (Event.Type == CSmModeEvent::EType::OnHit) {
-        if (Event.Shooter != Event.Victim && (Event.Shooter == CurrentRabbit || Event.Victim == CurrentRabbit)) {
-            Scores::AddPlayerRoundPoints(Event.Shooter.Score, 1);
-            if (Event.Victim == CurrentRabbit) {
-                LastHitRabbit = Event.Shooter;
+        if (Event.ShooterEntity != Null
+            && (Event.ShooterEntity is CSmPlayer)
+            && Event.VictimEntity != Null
+            && (Event.VictimEntity is CSmPlayer)
+            && Event.ShooterEntity.Id != Event.VictimEntity.Id
+            && (Event.ShooterEntity.Id == RabbitInfo.RabbitPlayerId || Event.VictimEntity.Id == RabbitInfo.RabbitPlayerId)) {
+            declare CSmPlayer ShooterPlayer <=> (Event.ShooterEntity as CSmPlayer);
+            Scores::AddPlayerRoundPoints(ShooterPlayer.Score, 1);
+            if (Event.VictimEntity.Id == RabbitInfo.RabbitPlayerId) {
+                RabbitInfo.LastHitRabbitPlayerId = Event.ShooterEntity.Id;
             }
             Events::Valid(Event);
         } else {
             Events::Invalid(Event);
         }
     } else if (Event.Type == CSmModeEvent::EType::OnPlayerRequestRespawn) {
-        if (Event.Player == CurrentRabbit) {
-            CurrentRabbit = Null;
-            LastHitRabbit = Null;
+        if (Event.Player.Id == RabbitInfo.RabbitPlayerId) {
+            RabbitInfo.RabbitPlayerId = NullId;
         }
-        Scores::RemovePlayerRoundPoints(Event.Player.Score, 1);
+        if (!S_DisablePointsLoss) {
+            Scores::RemovePlayerRoundPoints(Event.Player.Score, 1);
+        }
         Events::Valid(Event);
     } else {
         Events::Valid(Event);
     }
 }
+***
 
+
+***Match_PlayLoop_SpawnPlayers***
+***
 foreach (Player in Players) {
     if (Player.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned && !Player.RequestsSpectate) {
         if (SpawnsList.count == 0) {
@@ -131,36 +165,69 @@ foreach (Player in Players) {
             SpawnId = SpawnsList[Math::Rand(0, SpawnsList.count - 1)];
         }
         SM::Spawn(Player, 0, MapLandmarks_PlayerSpawn[SpawnId].PlayerSpawn);
-        SetHunter(Player);
+        if (Player.Id == RabbitInfo.RabbitPlayerId) {
+            SetRabbit(Player);
+        } else {
+            SetHunter(Player);
+        }
         SpawnsList.remove(SpawnId);
     }
 }
+***
 
-Layers::Update(C_RabbitStatusLayerName, RabbitStatusML(CurrentRabbit));
 
-if (CurrentRabbit == Null)
-{
-    declare CSmPlayer[] EligiblePlayers;
-    foreach (Player in Players) {
-        if (Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned && !Player.RequestsSpectate) {
-            EligiblePlayers.add(Player);
+***Match_PlayLoop_ManageRabbitSelection***
+***
+if (RabbitInfo.RabbitPlayerId != NullId
+    && (!Players.existskey(RabbitInfo.RabbitPlayerId) || Players[RabbitInfo.RabbitPlayerId].RequestsSpectate)) {
+    RabbitInfo.RabbitPlayerId = NullId;
+}
+
+if (RabbitInfo.RabbitPlayerId == NullId) {
+    // Choose hunter who last hit the rabbit
+    if (RabbitInfo.LastHitRabbitPlayerId != NullId
+        && Players.existskey(RabbitInfo.LastHitRabbitPlayerId)
+        && Players[RabbitInfo.LastHitRabbitPlayerId].SpawnStatus == CSmPlayer::ESpawnStatus::Spawned
+        && !Players[RabbitInfo.LastHitRabbitPlayerId].RequestsSpectate) {
+        RabbitInfo.RabbitPlayerId = Players[RabbitInfo.LastHitRabbitPlayerId].Id;
+        RabbitInfo.LastHitRabbitPlayerId = NullId;
+    // Choose at random from all valid players
+    } else {
+        declare Ident[] EligiblePlayerIds;
+        foreach (Player in Players) {
+            if (Player.SpawnStatus == CSmPlayer::ESpawnStatus::Spawned && !Player.RequestsSpectate) {
+                EligiblePlayerIds.add(Player.Id);
+            }
+        }
+        if (EligiblePlayerIds.count > 0) {
+            RabbitInfo.RabbitPlayerId = EligiblePlayerIds[Math::Rand(0, EligiblePlayerIds.count - 1)];
+            RabbitInfo.LastHitRabbitPlayerId = NullId;
         }
     }
-    if (EligiblePlayers.count > 0) {
-        CurrentRabbit = EligiblePlayers[Math::Rand(0, EligiblePlayers.count - 1)];
-        LastHitRabbit = Null;
-        SetRabbit(CurrentRabbit);
+
+    if (RabbitInfo.RabbitPlayerId != NullId && Players.existskey(RabbitInfo.RabbitPlayerId)) {
+        SetRabbit(Players[RabbitInfo.RabbitPlayerId]);
+        Layers::Update(C_RabbitStatusLayerName, RabbitStatusML(Players[RabbitInfo.RabbitPlayerId]));
+    } else {
+        Layers::Update(C_RabbitStatusLayerName, RabbitStatusML(Null));
     }
-} else if (CurrentRabbit.SpawnStatus == CSmPlayer::ESpawnStatus::NotSpawned || CurrentRabbit.RequestsSpectate) {
-    CurrentRabbit = Null;
-    LastHitRabbit = Null;
 }
+***
+
+
+***Match_PlayLoop***
+***
+
++++Match_PlayLoop_HandleEvents+++
++++Match_PlayLoop_SpawnPlayers+++
++++Match_PlayLoop_ManageRabbitSelection+++
 
 if (S_TimeLimit > 0 && Now > EndTime) {
     Message::SendBigMessage(_("Time limit reached"), 2000, 3, CUIConfig::EUISound::Silence, 0);
     MB_StopMatch();
 }
 ***
+
 
 ***Match_EndMap***
 ***
