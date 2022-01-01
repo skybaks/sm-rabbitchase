@@ -2,7 +2,7 @@
 #Extends "Modes/ShootMania/Base/ModeShootmania.Script.txt"
 
 #Const  CompatibleMapTypes  "MeleeArena"
-#Const  Version             "2.2.0"
+#Const  Version             "2.3.0"
 #Const  ScriptName          "Modes/ShootMania/RabbitChase.Script.txt"
 
 #Const C_HudModulePath "Nadeo/ShootMania/Melee/Hud.Module.Gbx"
@@ -94,7 +94,13 @@ SpawnsList = Ident[];
 PreviousRabbitsList = Ident[];
 
 if (Hud != Null && Hud.ScoresTable != Null) {
-    Hud.ScoresTable.SetFooterText(TextLib::Compose("Time limit - " ^ TextLib::TimeToText(S_TimeLimit * 1000)));
+    declare Text ScoreTableFooter = "Time limit - ";
+    if (S_TimeLimit >= 0) {
+        ScoreTableFooter ^= TextLib::TimeToText(S_TimeLimit * 1000);
+    } else {
+        ScoreTableFooter ^= "Unlimited";
+    }
+    Hud.ScoresTable.SetFooterText(TextLib::Compose(ScoreTableFooter));
 }
 
 StartTime = Now;
