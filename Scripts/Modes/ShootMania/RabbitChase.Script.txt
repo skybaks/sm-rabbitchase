@@ -2,7 +2,7 @@
 #Extends "Modes/ShootMania/Base/ModeShootmania.Script.txt"
 
 #Const  CompatibleMapTypes  "MeleeArena"
-#Const  Version             "2.0.0"
+#Const  Version             "2.1.0"
 #Const  ScriptName          "Modes/ShootMania/RabbitChase.Script.txt"
 
 #Const C_HudModulePath "Nadeo/ShootMania/Melee/Hud.Module.Gbx"
@@ -13,10 +13,12 @@
 #Include "TimeLib" as TimeLib
 #Include "Libs/Nadeo/Interface.Script.txt" as Interface
 
-#Setting S_TimeLimit            600     as _("Time Limit")
-#Setting S_RabbitArmor          3       as _("Rabbit Armor Count")
-#Setting S_HunterArmor          1       as _("Hunter Armor Count")
-#Setting S_DisablePointsLoss    False   as _("Disable Points Loss")
+#Setting S_TimeLimit            600     as _("Time Limit") ///< Length of the match in seconds
+#Setting S_RabbitArmor          3       as _("Rabbit Armor Count") ///< Number of Armors for the Rabbit
+#Setting S_DynamicRabbitArmor   False   as _("Dynamic Rabbit Armor") ///< Rabbit Armor scales with player count. When enabled, Rabbit Armor setting is used as a maximum.
+#Setting S_HunterArmor          1       as _("Hunter Armor Count") ///< Number of Armors for the Hunter
+#Setting S_DisablePointsLoss    False   as _("Disable Points Loss") ///< Points are not lost when getting hit
+
 
 #Struct K_RabbitInfo {
     Ident RabbitPlayerId;
@@ -70,6 +72,8 @@ SpawnScreen::CreateScores("Score.RoundPoints");
 ***
 UseClans = False;
 UseForcedClans = False;
+Scores::SaveInScore(Scores::C_Points_Map);
+Scores::EnablePlayerNegativePoints(True, True, True);
 Interface::CreateRank();
 Layers::Create(C_RabbitStatusLayerName, RabbitStatusML(Null));
 ***
@@ -97,6 +101,7 @@ if (S_TimeLimit > 0) {
     EndTime = -1;
 }
 
+// For Development
 //Users_CreateFake("fakeplayer_03", 0);
 //Users_CreateFake("fakeplayer_04", 0);
 
@@ -166,7 +171,7 @@ foreach (Player in Players) {
         }
         SM::Spawn(Player, 0, MapLandmarks_PlayerSpawn[SpawnId].PlayerSpawn);
         if (Player.Id == RabbitInfo.RabbitPlayerId) {
-            SetRabbit(Player);
+            SetRabbit(Player, GetRabbitMaxArmor(Players.count));
         } else {
             SetHunter(Player);
         }
@@ -206,7 +211,7 @@ if (RabbitInfo.RabbitPlayerId == NullId) {
     }
 
     if (RabbitInfo.RabbitPlayerId != NullId && Players.existskey(RabbitInfo.RabbitPlayerId)) {
-        SetRabbit(Players[RabbitInfo.RabbitPlayerId]);
+        SetRabbit(Players[RabbitInfo.RabbitPlayerId], GetRabbitMaxArmor(Players.count));
         Layers::Update(C_RabbitStatusLayerName, RabbitStatusML(Players[RabbitInfo.RabbitPlayerId]));
     } else {
         Layers::Update(C_RabbitStatusLayerName, RabbitStatusML(Null));
@@ -217,7 +222,6 @@ if (RabbitInfo.RabbitPlayerId == NullId) {
 
 ***Match_PlayLoop***
 ***
-
 +++Match_PlayLoop_HandleEvents+++
 +++Match_PlayLoop_SpawnPlayers+++
 +++Match_PlayLoop_ManageRabbitSelection+++
@@ -246,17 +250,27 @@ if (BestPlayerScore != Null) {
 
 Void SetHunter(CSmPlayer _Player) {
     _Player.ForceColor = <0.9,0.33,0.0>;
-    _Player.ArmorMax = 100 * S_HunterArmor;
-    _Player.Armor = 100 * S_HunterArmor;
+    _Player.ArmorMax = Math::Max(100, 100 * S_HunterArmor);
+    _Player.Armor = _Player.ArmorMax;
 }
 
-Void SetRabbit(CSmPlayer _Player) {
+Void SetRabbit(CSmPlayer _Player, Integer _ArmorMax) {
     _Player.ForceColor = <0.01,0.01,0.01>;
-    _Player.ArmorMax = 100 * S_RabbitArmor;
-    _Player.Armor = 100 * S_RabbitArmor;
-    
+    _Player.ArmorMax = _ArmorMax;
+    _Player.Armor = _Player.ArmorMax;
+
     declare Text Message = TextLib::Compose(_("$<%1$> is now the Rabbit"), _Player.User.Name);
     Message::SendBigMessage(Message, 3000, 2, CUIConfig::EUISound::Notice, 0);
+}
+
+Integer GetRabbitMaxArmor(Integer _PlayerCount) {
+    declare Integer ArmorValue = 0;
+    if (S_DynamicRabbitArmor) {
+        ArmorValue = Math::Clamp(100 * (_PlayerCount / 3), 100, 100 * S_RabbitArmor);
+    } else {
+        ArmorValue = Math::Max(100, 100 * S_RabbitArmor);
+    }
+    return ArmorValue;
 }
 
 Text RabbitStatusML(CSmPlayer _Player) {
