@@ -19,6 +19,7 @@
 #Setting S_HunterArmor          1       as _("Hunter Armor Count") ///< Number of Armors for the Hunter
 #Setting S_DisablePointsLoss    False   as _("Disable Points Loss") ///< Points are not lost when getting hit
 #Setting S_OnlyRandomRabbits    False   as _("Only Random Rabbits") ///< The next Rabbit is always chosen at random
+#Setting S_InstagibMode         False   as _("Instagib Mode") ///< Forces lasers for all players
 
 
 #Struct K_RabbitInfo {
@@ -111,8 +112,8 @@ if (S_TimeLimit > 0) {
 }
 
 // For Development
-//Users_CreateFake("fakeplayer_03", 0);
-//Users_CreateFake("fakeplayer_04", 0);
+//Users_CreateFake("fakeplayer_05", 0);
+//Users_CreateFake("fakeplayer_06", 0);
 
 Layers::Attach(C_RabbitStatusLayerName);
 ***
@@ -137,6 +138,10 @@ foreach (Event in PendingEvents) {
             && Event.VictimEntity != Null && (Event.VictimEntity is CSmPlayer)
             && Event.ShooterEntity.Id != Event.VictimEntity.Id && (Event.ShooterEntity.Id == RabbitInfo.RabbitPlayerId || Event.VictimEntity.Id == RabbitInfo.RabbitPlayerId)) {
             declare CSmPlayer ShooterPlayer <=> (Event.ShooterEntity as CSmPlayer);
+            if (S_InstagibMode) {
+                declare CSmPlayer VictimPlayer <=> (Event.VictimEntity as CSmPlayer);
+                VictimPlayer.Armor = 0;
+            }
             Scores::AddPlayerRoundPoints(ShooterPlayer.Score, 1);
             if (Event.VictimEntity.Id == RabbitInfo.RabbitPlayerId) {
                 RabbitInfo.LastHitRabbitPlayerId = Event.ShooterEntity.Id;
@@ -176,6 +181,9 @@ foreach (Player in Players) {
             SpawnId = SpawnsList[Math::Rand(0, SpawnsList.count - 1)];
         }
         SM::Spawn(Player, 0, MapLandmarks_PlayerSpawn[SpawnId].PlayerSpawn);
+        if (S_InstagibMode) {
+            SetPlayerWeapon(Player, CSmMode::EWeapon::Laser, False);
+        }
         if (Player.Id == RabbitInfo.RabbitPlayerId) {
             SetRabbit(Player, GetRabbitMaxArmor(Players.count));
         } else {
