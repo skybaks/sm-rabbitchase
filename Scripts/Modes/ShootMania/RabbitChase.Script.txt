@@ -181,8 +181,12 @@ foreach (Player in Players) {
             SpawnId = SpawnsList[Math::Rand(0, SpawnsList.count - 1)];
         }
         SM::Spawn(Player, 0, MapLandmarks_PlayerSpawn[SpawnId].PlayerSpawn);
+
         if (S_InstagibMode) {
             SetPlayerWeapon(Player, CSmMode::EWeapon::Laser, False);
+            Player.AmmoGain = 2.0;
+        } else {
+            Player.AmmoGain = 1.0;  // Default reload
         }
         if (Player.Id == RabbitInfo.RabbitPlayerId) {
             SetRabbit(Player, GetRabbitMaxArmor(Players.count));
@@ -289,6 +293,11 @@ Void SetRabbit(CSmPlayer _Player, Integer _ArmorMax) {
     _Player.ArmorMax = _ArmorMax;
     _Player.Armor = _Player.ArmorMax;
     _Player.Stamina = _Player.StaminaMaxValue;
+
+    SetPlayerAmmo(_Player, CSmMode::EWeapon::Rocket, GetPlayerAmmoMax(_Player, CSmMode::EWeapon::Rocket));
+    if (S_InstagibMode) {
+        SetPlayerAmmo(_Player, CSmMode::EWeapon::Laser, GetPlayerAmmoMax(_Player, CSmMode::EWeapon::Laser));
+    }
 
     declare Text Message = TextLib::Compose(_("$<%1$> is now the Rabbit"), _Player.User.Name);
     Message::SendBigMessage(Message, 3000, 2, CUIConfig::EUISound::Notice, 0);
