@@ -288,6 +288,7 @@ Void SetRabbit(CSmPlayer _Player, Integer _ArmorMax) {
     _Player.ForceColor = <0.01,0.01,0.01>;
     _Player.ArmorMax = _ArmorMax;
     _Player.Armor = _Player.ArmorMax;
+    _Player.Stamina = _Player.StaminaMaxValue;
 
     declare Text Message = TextLib::Compose(_("$<%1$> is now the Rabbit"), _Player.User.Name);
     Message::SendBigMessage(Message, 3000, 2, CUIConfig::EUISound::Notice, 0);
