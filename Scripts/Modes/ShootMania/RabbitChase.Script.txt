@@ -116,9 +116,11 @@ if (S_TimeLimit > 0) {
 }
 
 // For Development
+/*
 Users_DestroyAllFakes();
 Users_CreateFake("fakeplayer_05", 0);
 Users_CreateFake("fakeplayer_06", 0);
+*/
 
 Layers::SetType(C_RabbitMarkerLayerName, CUILayer::EUILayerType::Markers);
 Layers::Attach(C_RabbitStatusLayerName);
