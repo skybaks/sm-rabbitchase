@@ -7,6 +7,7 @@
 
 #Const C_HudModulePath "Nadeo/ShootMania/Melee/Hud.Module.Gbx"
 #Const C_RabbitStatusLayerName "RabbitStatus"
+#Const C_RabbitMarkerLayerName "RabbitMarker"
 
 #Include "MathLib" as Math
 #Include "TextLib" as TextLib
@@ -16,10 +17,12 @@
 #Setting S_TimeLimit            600     as _("Time Limit") ///< Length of the match in seconds
 #Setting S_RabbitArmor          3       as _("Rabbit Armor Count") ///< Number of Armors for the Rabbit
 #Setting S_DynamicRabbitArmor   False   as _("Dynamic Rabbit Armor") ///< Rabbit Armor scales with player count. When enabled, Rabbit Armor setting is used as a maximum.
+#Setting S_RabbitMarker         True    as _("Rabbit Marker") ///< Displays a marker above the Rabbit
 #Setting S_HunterArmor          1       as _("Hunter Armor Count") ///< Number of Armors for the Hunter
 #Setting S_DisablePointsLoss    False   as _("Disable Points Loss") ///< Points are not lost when getting hit
 #Setting S_OnlyRandomRabbits    False   as _("Only Random Rabbits") ///< The next Rabbit is always chosen at random
 #Setting S_InstagibMode         False   as _("Instagib Mode") ///< Forces lasers for all players
+
 
 
 #Struct K_RabbitInfo {
@@ -78,6 +81,7 @@ Scores::SaveInScore(Scores::C_Points_Map);
 Scores::EnablePlayerNegativePoints(True, True, True);
 Interface::CreateRank();
 Layers::Create(C_RabbitStatusLayerName, RabbitStatusML(Null));
+Layers::Create(C_RabbitMarkerLayerName, RabbitMarkerML());
 ***
 
 
@@ -112,9 +116,13 @@ if (S_TimeLimit > 0) {
 }
 
 // For Development
-//Users_CreateFake("fakeplayer_05", 0);
-//Users_CreateFake("fakeplayer_06", 0);
+/*
+Users_DestroyAllFakes();
+Users_CreateFake("fakeplayer_05", 0);
+Users_CreateFake("fakeplayer_06", 0);
+*/
 
+Layers::SetType(C_RabbitMarkerLayerName, CUILayer::EUILayerType::Markers);
 Layers::Attach(C_RabbitStatusLayerName);
 ***
 
@@ -261,6 +269,7 @@ if (RabbitInfo.RabbitPlayerId == NullId) {
 +++Match_PlayLoop_ManageRabbitSelection+++
 
 if (S_TimeLimit > 0 && Now > EndTime) {
+    SM::UnspawnAllPlayers(); // Makes sure Players despawn in time.
     Message::SendBigMessage(_("Time limit reached"), 2000, 3, CUIConfig::EUISound::Silence, 0);
     MB_StopMatch();
 }
@@ -269,6 +278,8 @@ if (S_TimeLimit > 0 && Now > EndTime) {
 
 ***Match_EndMap***
 ***
+Layers::Detach(C_RabbitMarkerLayerName);
+UIManager.UIAll.MarkersXML = "";
 EndTime = -1;
 MB_Sleep(2000);
 SM::UnspawnAllPlayers();
@@ -289,10 +300,21 @@ Void SetHunter(CSmPlayer _Player) {
 }
 
 Void SetRabbit(CSmPlayer _Player, Integer _ArmorMax) {
+    declare netwrite Text RabbitPlayerLogin for Teams[0];
+    RabbitPlayerLogin = _Player.User.Login;
     _Player.ForceColor = <0.01,0.01,0.01>;
     _Player.ArmorMax = _ArmorMax;
     _Player.Armor = _Player.ArmorMax;
     _Player.Stamina = _Player.StaminaMaxValue;
+
+    //Rabbit Marker
+    if (S_RabbitMarker) {
+        Layers::Attach(C_RabbitMarkerLayerName);
+        UIManager.UIAll.MarkersXML = """<marker playerid="{{{_Player.Id}}}" manialinkframeid="Frame_RabbitMarker"/>""";
+    }
+    else {
+        UIManager.UIAll.MarkersXML = "";
+    }
 
     SetPlayerAmmo(_Player, CSmMode::EWeapon::Rocket, GetPlayerAmmoMax(_Player, CSmMode::EWeapon::Rocket));
     if (S_InstagibMode) {
@@ -323,3 +345,50 @@ Text RabbitStatusML(CSmPlayer _Player) {
     return MLText;
 }
 
+Text RabbitMarkerML() {
+    return """
+    <?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+	<manialink version="3">
+		<frame id="Frame_RabbitMarker" scale="0.6" pos="0, -100">
+			<frame id="Frame_RabbitHead">
+                <label pos="0.5 -5" z-index="0" size="5 5" text="3" halign="center" valign="center" textsize="3" textcolor="000" rot="90" textfont="BiryaniDemiBold"/>
+                <label pos="1 -2.5" z-index="0" size="5 5" text="=" textcolor="F00" rot="90" halign="center" valign="center" textfont="BiryaniDemiBold" textsize="6"/>
+                <label pos="-2 0" z-index="0" size="15 15" text="" halign="center" valign="center" textsize="10" rot="160" id="Label_EarLeft"/>
+                <label pos="2 0" z-index="0" size="15 15" text="" halign="center" valign="center" textsize="10" rot="-160" id="Label_EarRight"/>
+                <label pos="0 -4" z-index="0" size="15 15" text="" halign="center" valign="center" textsize="5" id="Label_Head"/>
+			</frame>
+			<label pos="0 -10" z-index="0" size="30 5" text="UserName" halign="center" valign="center" id="Label_RabbitName"/>
+			<quad pos="0 -10" z-index="0" size="35 5" bgcolor="555555AA" halign="center" valign="center"/>
+		</frame>
+        <script><!--
+        main() {
+            declare CMlLabel Label_RabbitName <=> (Page.GetFirstChild("Label_RabbitName") as CMlLabel);
+            declare CMlLabel Label_EarLeft <=> (Page.GetFirstChild("Label_EarLeft") as CMlLabel);
+            declare CMlLabel Label_EarRight <=> (Page.GetFirstChild("Label_EarRight") as CMlLabel);
+            declare CMlLabel Label_Head <=> (Page.GetFirstChild("Label_Head") as CMlLabel);
+            declare CMlFrame Frame_RabbitMarker <=> (Page.GetFirstChild("Frame_RabbitMarker") as CMlFrame);
+            while (True) {
+                yield;
+                declare netread Text RabbitPlayerLogin for Teams[0];
+                declare Text PreviousLogin;
+                if (PreviousLogin != RabbitPlayerLogin) {
+                    foreach (Player in Players) {
+                        if (Player.User.Login == RabbitPlayerLogin) {
+                            Label_RabbitName.Value = RabbitPlayerLogin;
+                            /*
+                            Rabbit face coloring stuff. Can leave it or take it. idk
+
+                            Label_EarLeft.TextColor = Player.User.Color;
+                            Label_EarRight.TextColor = Player.User.Color;
+                            Label_Head.TextColor = Player.User.Color;
+                            */
+                        }
+                        PreviousLogin = RabbitPlayerLogin;
+                    }
+                }
+            }
+        }
+        --></script>
+	</manialink>
+    """;
+}
